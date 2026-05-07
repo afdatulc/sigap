@@ -24,6 +24,11 @@ Route::get('/dev/login-mitra', function () {
     return redirect('/mitra/survei');
 });
 
+Route::post('/logout', function () {
+    Auth::logout();
+    return redirect('/');
+})->name('logout');
+
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::resource('penduduk', PendudukController::class);
