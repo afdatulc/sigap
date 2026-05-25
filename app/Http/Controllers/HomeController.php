@@ -2,30 +2,59 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Penduduk;
-use App\Models\Usaha;
+use App\Models\Rumah;
 use Illuminate\Http\Request;
 
 class HomeController extends Controller
 {
     public function index()
     {
+        $isAdmin = auth()->check() && auth()->user()->hasRole('Admin');
+
         $stats = [
-            'penduduk' => Penduduk::count(),
-            'usaha' => Usaha::count(),
-            'listrik' => Penduduk::where('status_listrik', 'Memiliki')->count(),
+            'rumah' => Rumah::count(),
+            'usaha' => Rumah::where('memiliki_usaha', true)->count(),
+            'listrik' => Rumah::whereIn('status_listrik', ['listrik pln dengan meteran', 'listrik pln tanpa meteran'])->count(),
         ];
 
-        // Fetch data for public map (Hide NIK and detailed address)
-        $pendudukData = Penduduk::whereNotNull('latitude')
-                                ->whereNotNull('longitude')
-                                ->get(['id', 'nama_lengkap', 'status_listrik', 'status_ekonomi', 'latitude', 'longitude']);
-                                
-        $usahaData = Usaha::whereNotNull('latitude')
-                            ->whereNotNull('longitude')
-                            ->where('status_aktif', true)
-                            ->get(['id', 'nama_usaha', 'kategori_usaha', 'latitude', 'longitude']);
+        // Chart Data: Distribusi Listrik
+        $listrikStats = Rumah::selectRaw('status_listrik, count(*) as total')
+            ->groupBy('status_listrik')
+            ->get();
 
-        return view('welcome', compact('stats', 'pendudukData', 'usahaData'));
+        // Chart Data: Kepemilikan Usaha
+        $usahaStats = [
+            'Memiliki Usaha' => Rumah::where('memiliki_usaha', true)->count(),
+            'Tidak Memiliki Usaha' => Rumah::where('memiliki_usaha', false)->count(),
+        ];
+
+        // RT/RW List for Filter
+        $rtRwList = Rumah::whereNotNull('rt_rw')
+            ->distinct()
+            ->orderBy('rt_rw')
+            ->pluck('rt_rw');
+
+        // Fetch data for public map with Privacy Logic
+        $query = Rumah::whereNotNull('latitude')->whereNotNull('longitude');
+        
+        $columns = ['id', 'status_listrik', 'memiliki_usaha', 'latitude', 'longitude', 'rt_rw'];
+        if ($isAdmin) {
+            $columns[] = 'nama_kepala_rumah';
+            $columns[] = 'alamat';
+        }
+
+        $rumahData = $query->get($columns)->map(function($item) use ($isAdmin) {
+            if (!$isAdmin) {
+                $item->nama_kepala_rumah = 'Warga Desa'; // Anonymized
+                $item->alamat = 'Alamat Disembunyikan'; // Anonymized
+            }
+            return $item;
+        });
+
+        // Usaha Directory for Public
+        $usahaDirectory = Rumah::where('memiliki_usaha', true)
+            ->get(['id', 'nama_kepala_rumah', 'alamat', 'rt_rw']);
+                                
+        return view('welcome', compact('stats', 'rumahData', 'listrikStats', 'usahaStats', 'rtRwList', 'usahaDirectory', 'isAdmin'));
     }
 }

@@ -30,4 +30,9 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function rumahs()
+    {
+        return $this->hasMany(Rumah::class, 'created_by');
+    }
 }
